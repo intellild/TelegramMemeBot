@@ -28,7 +28,8 @@ namespace Telegram.Synthetic.Dawn
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
-            services.AddHostedService<BotService>();
+            services.AddHealthChecks();
+            services.AddSingleton<BotService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -47,6 +48,7 @@ namespace Telegram.Synthetic.Dawn
 
             app.UseEndpoints(endpoints =>
             {
+                endpoints.MapHealthChecks("health");
                 endpoints.MapControllers();
             });
         }

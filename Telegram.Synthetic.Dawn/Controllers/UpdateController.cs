@@ -16,14 +16,10 @@ namespace Telegram.Synthetic.Dawn.Controllers
             _botService = botService;
         }
 
-        [HttpGet("hello")]
-        public string Hello() => "world";
-
-        [HttpPost("update")]
-        public async Task<IActionResult> Update(Update update)
+        public async Task<ActionResult<string>> Update(Update update)
         {
             await _botService.HandleUpdateAsync(update);
-            return Ok();
+            return Ok("hello");
         }
     }
 }
