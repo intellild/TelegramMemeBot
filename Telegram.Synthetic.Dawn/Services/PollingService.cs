@@ -43,6 +43,7 @@ namespace Telegram.Synthetic.Dawn.Services
         public async Task StartAsync(CancellationToken cancellationToken)
 #pragma warning restore 1998
         {
+            await _botService.Initialize();
             if (_environment.IsDevelopment() || Environment.GetEnvironmentVariable("POLLING") != null)
             {
                 _botService.StartPolling(new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),

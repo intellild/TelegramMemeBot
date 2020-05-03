@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -29,6 +30,10 @@ namespace Telegram.Synthetic.Dawn
         {
             services.AddControllers();
             services.AddHealthChecks();
+            services.AddDbContext<MemeContext>(options =>
+            {
+                options.UseNpgsql(Configuration.GetConnectionString("MemeContext"));
+            });
             services.AddSingleton<BotService>();
         }
 
