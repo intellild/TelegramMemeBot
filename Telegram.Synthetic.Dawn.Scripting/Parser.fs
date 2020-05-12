@@ -3,10 +3,6 @@
 open System
 open Telegram.Bot.Types
 
-type Position = int * int
-
-type Input = string * MessageEntity list
-
 type State =
     { offset: int
       row: int
@@ -23,8 +19,8 @@ type Item =
     | Single of Char
     | End
 
-let sprintfResult result =
-    match result with
+let sprintfResult r =
+    match r with
     | (_, Ok (value)) -> sprintf "%A" value
     | (state, Error (label, error)) ->
         let failureCaret = sprintf "%*s^%s" state.col "" error
@@ -34,13 +30,13 @@ let getLabel p =
     let (label, _) = p
     label
 
-let setLabel parser label =
-    let (_, fn) = parser
+let setLabel p label =
+    let (_, fn) = p
     (label,
      (fun state ->
          match fn state with
-         | Ok (value) -> (state, Ok(value))
-         | Error ((_, msg)) -> (state, Error(label, msg))))
+         | (state, Ok (value)) -> (state, Ok(value))
+         | (state, Error ((_, msg))) -> (state, Error(label, msg))))
 
 let private bumpRow state =
     { state with
@@ -103,7 +99,7 @@ let satisfy predicate label =
                     else Error(label, sprintf "Unexpected character '%c'" char)
                 | Entity (text, entity) ->
                     Error(label, sprintf "Unexpected entity '%s' with text '%s'" (entity.Type.ToString()) text)
-            return result r
+            return! result r
         }
     (label, p)
 
@@ -117,6 +113,13 @@ let digit () = satisfy Char.IsDigit "digit"
 let run p state =
     let (_, f) = p
     f state
+
+let map f p =
+    let impl =
+        parser {
+            let! char = run p
+            return f char }
+    (getLabel p, impl)
 
 let orElse p1 p2 =
     let label = sprintf "%s orElse %s" (getLabel p1) (getLabel p2)
@@ -146,3 +149,52 @@ let any list =
     list
     |> List.map char
     |> choice
+
+let many p =
+    let rec manyImpl f state =
+        match run p state with
+        | (_, Error _) -> (state, Ok(f []))
+        | (state, Ok value) -> manyImpl (fun rest -> f <| List.Cons(value, rest)) state
+    ("", manyImpl id)
+
+let many1 p =
+    let many1Impl =
+        parser {
+            let! value = run p
+            let! rest = run <| many p
+            return List.Cons(value, rest) }
+    ("", many1Impl)
+
+let not dummy p =
+    let label = sprintf "not %s" <| getLabel p
+
+    let notImpl state =
+        match run p state with
+        | (state, Ok value) -> (state, Error(label, sprintf "Unexpected \"%A\"" value))
+        | (_, Error _) -> (state, Ok(dummy))
+    (label, notImpl)
+
+let escaped =
+    let escapedImpl =
+        parser {
+            let! _ = run <| char '\\'
+            let! next = run <| any [ 'n'; 't'; '\\'; '\"' ]
+            let r =
+                match next with
+                | 'n' -> Ok('\n')
+                | 't' -> Ok('\t')
+                | '\\' -> Ok('\\')
+                | '\"' -> Ok('\"')
+                | char -> Error("escaped", sprintf "Unexpected character '%c'" char)
+            return! result r
+        }
+    ("escaped", escapedImpl)
+
+let stringContent: T<string> =
+    let stringContentImpl =
+        [ escaped |> (map (fun char -> sprintf "%c" char))
+          not "" <| char '\"' ]
+        |> choice
+        |> many
+        |> (map <| List.reduce (+))
+    setLabel stringContentImpl "string"
