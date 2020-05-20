@@ -38,6 +38,8 @@ let setLabel p label =
          | (state, Ok (value)) -> (state, Ok(value))
          | (state, Error ((_, msg))) -> (state, Error(label, msg))))
 
+let (<?>) = setLabel
+
 let private bumpRow state =
     { state with
           offset = state.offset + 1
@@ -59,6 +61,12 @@ type ParserBuilder() =
 
     member this.Return value = fun state -> (state, Ok(value))
     member this.ReturnFrom m = m
+    member this.Yield value = fun state -> (state, Ok(value))
+    member this.YieldFrom m = m
+    member this.For(list, f) =
+        List.foldBack (fun elem acc ->
+            this.Bind(elem, (fun head -> this.Bind(acc, (fun tail state -> (state, Ok(head :: tail))))))) list
+            (this.Return [])
 
 let rec take state =
     let normal =
@@ -103,7 +111,7 @@ let satisfy predicate label =
         }
     (label, p)
 
-let char expect =
+let parseChar expect =
     let predicate ch = ch = expect
     let label = sprintf "%c" expect
     satisfy predicate label
@@ -121,6 +129,10 @@ let map f p =
             return f char }
     (getLabel p, impl)
 
+let mapTo p r = map (fun _ -> r) p
+
+let (>>%) = mapTo
+
 let orElse p1 p2 =
     let label = sprintf "%s orElse %s" (getLabel p1) (getLabel p2)
 
@@ -132,13 +144,14 @@ let orElse p1 p2 =
 
 let (<|>) = orElse
 
-let andThen p1 p2 =
+let andThen combine p1 p2 =
     let label = sprintf "%s andThen %s" (getLabel p1) (getLabel p2)
 
     let andThenImpl =
         parser {
-            let! _ = run p1
-            return! run p2 }
+            let! value1 = run p1
+            let! value2 = run p2
+            return combine value1 value2 }
     (label, andThenImpl)
 
 let (.>>.) = andThen
@@ -147,54 +160,83 @@ let choice list = List.reduce orElse list
 
 let any list =
     list
-    |> List.map char
+    |> List.map parseChar
     |> choice
 
 let many p =
     let rec manyImpl f state =
         match run p state with
         | (_, Error _) -> (state, Ok(f []))
-        | (state, Ok value) -> manyImpl (fun rest -> f <| List.Cons(value, rest)) state
+        | (state, Ok head) -> manyImpl (fun tail -> f <| head :: tail) state
     ("", manyImpl id)
 
 let many1 p =
     let many1Impl =
         parser {
-            let! value = run p
-            let! rest = run <| many p
-            return List.Cons(value, rest) }
+            let! head = run p
+            let! tail = run <| many p
+            return head :: tail }
     ("", many1Impl)
 
-let not dummy p =
-    let label = sprintf "not %s" <| getLabel p
+let sequence plist =
+    parser {
+        for p in (List.map run plist) do
+            yield! run p
+    }
 
-    let notImpl state =
-        match run p state with
-        | (state, Ok value) -> (state, Error(label, sprintf "Unexpected \"%A\"" value))
-        | (_, Error _) -> (state, Ok(dummy))
-    (label, notImpl)
+let parseString str =
+    let label = sprintf "parse string \'%s\'" str
 
-let escaped =
-    let escapedImpl =
+    let p =
+        str
+        |> List.ofSeq
+        |> List.map parseChar
+        |> sequence
+
+    let inner =
         parser {
-            let! _ = run <| char '\\'
-            let! next = run <| any [ 'n'; 't'; '\\'; '\"' ]
-            let r =
-                match next with
-                | 'n' -> Ok('\n')
-                | 't' -> Ok('\t')
-                | '\\' -> Ok('\\')
-                | '\"' -> Ok('\"')
-                | char -> Error("escaped", sprintf "Unexpected character '%c'" char)
-            return! result r
-        }
-    ("escaped", escapedImpl)
+            let! chars = p
+            return String(Array.ofList chars) }
+    (label, inner)
 
-let stringContent: T<string> =
-    let stringContentImpl =
-        [ escaped |> (map (fun char -> sprintf "%c" char))
-          not "" <| char '\"' ]
+let stringLiteral =
+    let unescaped = satisfy (fun ch -> ch <> '\\' && ch <> '\"') "unescaped char"
+
+    let escaped =
+        [ ("\\\"", '\"')
+          ("\\\\", '\\')
+          ("\\/", '/')
+          ("\\b", '\b')
+          ("\\f", '\f')
+          ("\\n", '\n')
+          ("\\r", '\r')
+          ("\\t", '\t') ]
+        |> List.map (fun (toMatch, result) -> parseString toMatch >>% result)
         |> choice
-        |> many
-        |> (map <| List.reduce (+))
-    setLabel stringContentImpl "string"
+        <?> "escaped char"
+
+    let unicode =
+        let label = ""
+        let hexDigit = any ([ '0' .. '9' ] @ [ 'A' .. 'F' ] @ [ 'a' .. 'f' ])
+
+        let impl =
+            parser {
+                let! _ = run <| parseChar '\\'
+                let! _ = run <| parseChar 'u'
+                let! a = run hexDigit
+                let! b = run hexDigit
+                let! c = run hexDigit
+                let! d = run hexDigit
+                let str = sprintf "%c%c%c%c" a b c d
+                return UInt32.Parse(str, Globalization.NumberStyles.HexNumber) |> char
+            }
+        (label, impl)
+
+    let charLiteral = unescaped <|> escaped <|> unicode
+
+    let impl =
+        parser {
+            let! _ = run <| parseChar '\"'
+            let! chars = run <| many charLiteral
+            return String(Array.ofList chars) }
+    ("string literal", impl)
