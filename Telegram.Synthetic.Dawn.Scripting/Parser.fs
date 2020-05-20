@@ -19,6 +19,13 @@ type Item =
     | Single of Char
     | End
 
+let init text entities =
+    { offset = 0
+      row = 0
+      col = 0
+      text = text
+      entities = entities }
+
 let sprintfResult r =
     match r with
     | (_, Ok (value)) -> sprintf "%A" value
@@ -69,15 +76,15 @@ type ParserBuilder() =
             (this.Return [])
 
 let rec take state =
-    let normal =
-        let ch = state.text.[state.offset + 1]
+    let normal () =
+        let ch = state.text.[state.offset]
         if ch = '\n' then bumpRow state |> take
         elif Char.IsWhiteSpace ch then bumpCol state |> take
         else (bumpCol state, Ok(Single(ch)))
     if state.offset >= String.length state.text then
         (state, Ok(End))
     elif List.isEmpty state.entities then
-        normal
+        normal ()
     else
         let entity = List.head state.entities
         if entity.Offset = state.offset then
@@ -87,7 +94,7 @@ let rec take state =
                    entities = List.tail state.entities },
              Ok(Entity(state.text.[entity.Offset..(entity.Length + entity.Offset)], entity)))
         else
-            normal
+            normal ()
 
 let result parserResult =
     fun state -> (state, parserResult)
@@ -116,8 +123,6 @@ let parseChar expect =
     let label = sprintf "%c" expect
     satisfy predicate label
 
-let digit () = satisfy Char.IsDigit "digit"
-
 let run p state =
     let (_, f) = p
     f state
@@ -132,6 +137,8 @@ let map f p =
 let mapTo p r = map (fun _ -> r) p
 
 let (>>%) = mapTo
+
+let parseDigit = satisfy Char.IsDigit "digit"
 
 let orElse p1 p2 =
     let label = sprintf "%s orElse %s" (getLabel p1) (getLabel p2)
@@ -199,41 +206,41 @@ let parseString str =
             return String(Array.ofList chars) }
     (label, inner)
 
+let unescaped = satisfy (fun ch -> ch <> '\\' && ch <> '\"') "unescaped char"
+
+let escaped =
+    [ ("\\\"", '\"')
+      ("\\\\", '\\')
+      ("\\/", '/')
+      ("\\b", '\b')
+      ("\\f", '\f')
+      ("\\n", '\n')
+      ("\\r", '\r')
+      ("\\t", '\t') ]
+    |> List.map (fun (toMatch, result) -> parseString toMatch >>% result)
+    |> choice
+    <?> "escaped char"
+
+let unicode =
+    let label = ""
+    let hexDigit = any ([ '0' .. '9' ] @ [ 'A' .. 'F' ] @ [ 'a' .. 'f' ])
+
+    let impl =
+        parser {
+            let! _ = run <| parseChar '\\'
+            let! _ = run <| parseChar 'u'
+            let! a = run hexDigit
+            let! b = run hexDigit
+            let! c = run hexDigit
+            let! d = run hexDigit
+            let str = sprintf "%c%c%c%c" a b c d
+            return UInt32.Parse(str, Globalization.NumberStyles.HexNumber) |> char
+        }
+    (label, impl)
+
+let charLiteral = unescaped <|> escaped <|> unicode
+
 let stringLiteral =
-    let unescaped = satisfy (fun ch -> ch <> '\\' && ch <> '\"') "unescaped char"
-
-    let escaped =
-        [ ("\\\"", '\"')
-          ("\\\\", '\\')
-          ("\\/", '/')
-          ("\\b", '\b')
-          ("\\f", '\f')
-          ("\\n", '\n')
-          ("\\r", '\r')
-          ("\\t", '\t') ]
-        |> List.map (fun (toMatch, result) -> parseString toMatch >>% result)
-        |> choice
-        <?> "escaped char"
-
-    let unicode =
-        let label = ""
-        let hexDigit = any ([ '0' .. '9' ] @ [ 'A' .. 'F' ] @ [ 'a' .. 'f' ])
-
-        let impl =
-            parser {
-                let! _ = run <| parseChar '\\'
-                let! _ = run <| parseChar 'u'
-                let! a = run hexDigit
-                let! b = run hexDigit
-                let! c = run hexDigit
-                let! d = run hexDigit
-                let str = sprintf "%c%c%c%c" a b c d
-                return UInt32.Parse(str, Globalization.NumberStyles.HexNumber) |> char
-            }
-        (label, impl)
-
-    let charLiteral = unescaped <|> escaped <|> unicode
-
     let impl =
         parser {
             let! _ = run <| parseChar '\"'
