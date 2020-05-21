@@ -295,10 +295,12 @@ let integerLiteral =
     ("number", impl)
 
 let private parseIdentifier =
+    let letter = [ 'a' .. 'z' ]
+    let digit = [ '0' .. '9' ]
     parser {
-        let! leading = run <| any ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ])
+        let! leading = run <| any letter
         let! rest =
-            ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ] @ [ '-'; '?' ])
+            (letter @ digit @ [ '-'; '?' ])
             |> any
             |> many
             |> run
