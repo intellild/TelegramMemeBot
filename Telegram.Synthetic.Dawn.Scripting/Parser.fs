@@ -1,6 +1,7 @@
 ﻿module Parser
 
 open System
+open System.Numerics
 open Telegram.Bot.Types
 
 type State =
@@ -128,6 +129,15 @@ let run p state =
     let (_, f) = p
     f state
 
+let optional p =
+    let label = sprintf "optional %s" <| getLabel p
+
+    let impl state =
+        match run p state with
+        | (state, Ok value) -> (state, Ok <| Some value)
+        | (_, Error _) -> (state, Ok None)
+    (label, impl)
+
 let map f p =
     let impl =
         parser {
@@ -248,4 +258,20 @@ let stringLiteral =
             let! chars = run <| many charLiteral
             let! _ = run <| parseChar '\"'
             return String(Array.ofList chars) }
-    ("string literal", impl)
+    ("string", impl)
+
+let integerLiteral =
+    let impl =
+        parser {
+            let! minus =
+                parseChar '-'
+                |> optional
+                |> run
+            let! value = many1 parseDigit |> run
+            let result =
+                match minus with
+                | Some _ -> '-'::value |> Array.ofList |> String
+                | None -> value |> Array.ofList |> String
+            return BigInteger.Parse(result)
+        }
+    ("number", impl)
