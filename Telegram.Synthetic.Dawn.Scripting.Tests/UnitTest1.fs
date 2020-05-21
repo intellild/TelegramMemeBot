@@ -65,33 +65,34 @@ let testStringLiteral () =
     let state =
         init "\"\\\\abc abc\\n\\t\\b\\f\\r\\/\\\"\"" []
     match run stringLiteral state with
-    | (_, Ok value) -> Assert.AreEqual("\\abc abc\n\t\b\f\r/\"", value)
+    | (_, Ok value) ->
+        Assert.AreEqual(StringLiteral "\\abc abc\n\t\b\f\r/\"", value)
     | _ -> Assert.Fail("error")
 
 [<Test>]
 let testPositiveIntegerLiteral () =
     let state = init "91389681247993671255432112000000" []
     match run integerLiteral state with
-    | (_, Ok value) -> Assert.AreEqual(BigInteger.Parse("91389681247993671255432112000000"), value)
+    | (_, Ok value) -> Assert.AreEqual(Integer(BigInteger.Parse("91389681247993671255432112000000")), value)
     | _ -> Assert.Fail("error")
 
 [<Test>]
 let testNegativeIntegerLiteral () =
     let state = init "-91389681247993671255432112000000" []
     match run integerLiteral state with
-    | (_, Ok value) -> Assert.AreEqual(BigInteger.Parse("-91389681247993671255432112000000"), value)
+    | (_, Ok value) -> Assert.AreEqual(Integer(BigInteger.Parse("-91389681247993671255432112000000")), value)
     | _ -> Assert.Fail("error")
 
 [<Test>]
 let testIdentifier () =
     let state = init "abc?-abc?   " []
     match run identifier state with
-    | (_, Ok value) -> Assert.AreEqual("abc?-abc?", value)
+    | (_, Ok value) -> Assert.AreEqual(Identifier "abc?-abc?", value)
     | _ -> Assert.Fail("error")
 
 [<Test>]
 let testAtom () =
     let state = init ":abc?-abc?   " []
     match run atom state with
-    | (_, Ok value) -> Assert.AreEqual("abc?-abc?", value)
+    | (_, Ok value) -> Assert.AreEqual(Atom "abc?-abc?", value)
     | _ -> Assert.Fail("error")

@@ -16,9 +16,16 @@ type ParserResult<'a> = Result<'a, string * string>
 type T<'a> = string * (State -> State * 'a ParserResult)
 
 type NextItem =
-    | Entity of String * MessageEntity
-    | Single of Char
+    | Entity of string * MessageEntity
+    | Single of char
     | End
+
+type Expression =
+    | Integer of BigInteger
+    | Atom of string
+    | Identifier of string
+    | StringLiteral of string
+    | Alien of string * MessageEntity
 
 let init text entities =
     { offset = 0
@@ -129,6 +136,11 @@ let run p state =
     let (_, f) = p
     f state
 
+let stringFromCharList chars =
+    chars
+    |> Array.ofList
+    |> String
+
 let optional p =
     let label = sprintf "optional %s" <| getLabel p
 
@@ -214,7 +226,7 @@ let parseString str =
     let inner =
         parser {
             let! chars = p
-            return String(Array.ofList chars) }
+            return stringFromCharList chars }
     (label, inner)
 
 let unescaped = satisfy (fun ch -> ch <> '\\' && ch <> '\"') "unescaped char"
@@ -257,7 +269,10 @@ let stringLiteral =
             let! _ = run <| parseChar '\"'
             let! chars = run <| many charLiteral
             let! _ = run <| parseChar '\"'
-            return String(Array.ofList chars) }
+            return chars
+                   |> stringFromCharList
+                   |> StringLiteral
+        }
     ("string", impl)
 
 let integerLiteral =
@@ -270,19 +285,16 @@ let integerLiteral =
             let! value = many1 parseDigit |> run
             let result =
                 match minus with
-                | Some _ ->
-                    '-' :: value
-                    |> Array.ofList
-                    |> String
-                | None ->
-                    value
-                    |> Array.ofList
-                    |> String
-            return BigInteger.Parse(result)
+                | Some _ -> '-' :: value
+                | None -> value
+            return result
+                   |> stringFromCharList
+                   |> BigInteger.Parse
+                   |> Integer
         }
     ("number", impl)
 
-let parseIdentifier =
+let private parseIdentifier =
     parser {
         let! leading = run <| any ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ])
         let! rest =
@@ -290,17 +302,20 @@ let parseIdentifier =
             |> any
             |> many
             |> run
-        return leading :: rest
-               |> Array.ofList
-               |> String
+        return leading :: rest |> stringFromCharList
     }
 
-let identifier = ("identifier", parseIdentifier)
+let identifier =
+    let impl =
+        parser {
+            let! name = parseIdentifier
+            return Identifier name }
+    ("identifier", impl)
 
 let atom =
     let impl =
         parser {
             let! _ = run <| parseChar ':'
             let! name = parseIdentifier
-            return name }
+            return Atom name }
     ("atom", impl)
