@@ -81,3 +81,17 @@ let testNegativeIntegerLiteral () =
     match run integerLiteral state with
     | (_, Ok value) -> Assert.AreEqual(BigInteger.Parse("-91389681247993671255432112000000"), value)
     | _ -> Assert.Fail("error")
+
+[<Test>]
+let testIdentifier () =
+    let state = init "abc?-abc?   " []
+    match run identifier state with
+    | (_, Ok value) -> Assert.AreEqual("abc?-abc?", value)
+    | _ -> Assert.Fail("error")
+
+[<Test>]
+let testAtom () =
+    let state = init ":abc?-abc?   " []
+    match run atom state with
+    | (_, Ok value) -> Assert.AreEqual("abc?-abc?", value)
+    | _ -> Assert.Fail("error")

@@ -270,8 +270,37 @@ let integerLiteral =
             let! value = many1 parseDigit |> run
             let result =
                 match minus with
-                | Some _ -> '-'::value |> Array.ofList |> String
-                | None -> value |> Array.ofList |> String
+                | Some _ ->
+                    '-' :: value
+                    |> Array.ofList
+                    |> String
+                | None ->
+                    value
+                    |> Array.ofList
+                    |> String
             return BigInteger.Parse(result)
         }
     ("number", impl)
+
+let parseIdentifier =
+    parser {
+        let! leading = run <| any ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ])
+        let! rest =
+            ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ] @ [ '-'; '?' ])
+            |> any
+            |> many
+            |> run
+        return leading :: rest
+               |> Array.ofList
+               |> String
+    }
+
+let identifier = ("identifier", parseIdentifier)
+
+let atom =
+    let impl =
+        parser {
+            let! _ = run <| parseChar ':'
+            let! name = parseIdentifier
+            return name }
+    ("atom", impl)
