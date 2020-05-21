@@ -14,8 +14,8 @@ type ParserResult<'a> = Result<'a, string * string>
 
 type T<'a> = string * (State -> State * 'a ParserResult)
 
-type Item =
-    | Entity of string * MessageEntity
+type NextItem =
+    | Entity of String * MessageEntity
     | Single of Char
     | End
 
@@ -75,12 +75,13 @@ type ParserBuilder() =
             this.Bind(elem, (fun head -> this.Bind(acc, (fun tail state -> (state, Ok(head :: tail))))))) list
             (this.Return [])
 
-let rec take state =
+let take state =
     let normal () =
         let ch = state.text.[state.offset]
-        if ch = '\n' then bumpRow state |> take
-        elif Char.IsWhiteSpace ch then bumpCol state |> take
-        else (bumpCol state, Ok(Single(ch)))
+
+        let state =
+            if ch = '\n' then bumpRow state else bumpCol state
+        (state, Ok(Single ch))
     if state.offset >= String.length state.text then
         (state, Ok(End))
     elif List.isEmpty state.entities then
@@ -245,5 +246,6 @@ let stringLiteral =
         parser {
             let! _ = run <| parseChar '\"'
             let! chars = run <| many charLiteral
+            let! _ = run <| parseChar '\"'
             return String(Array.ofList chars) }
     ("string literal", impl)

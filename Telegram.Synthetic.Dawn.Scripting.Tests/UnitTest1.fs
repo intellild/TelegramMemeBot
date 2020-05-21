@@ -42,7 +42,7 @@ let testMany () =
     match run manyA state with
     | ({ offset = 3; row = 0; col = 3 }, Ok value) -> Assert.AreEqual(value, "aaa")
     | _ -> Assert.Fail("error")
-    
+
 [<Test>]
 let testMany1 () =
     let manyA = many1 <| parseChar 'a'
@@ -50,11 +50,19 @@ let testMany1 () =
     match run manyA state with
     | ({ offset = 3; row = 0; col = 3 }, Ok value) -> Assert.AreEqual(value, "aaa")
     | _ -> Assert.Fail("error")
-    
+
 [<Test>]
 let testMany1Error () =
     let manyA = many1 <| parseChar 'a'
     let state = init "b" []
     match run manyA state with
     | (_, Error value) -> Assert.Pass()
+    | _ -> Assert.Fail("error")
+
+[<Test>]
+let testStringLiteral () =
+    let state =
+        init "\"\\\\abc abc\\n\\t\\b\\f\\r\\/\\\"\"" []
+    match run stringLiteral state with
+    | (_, Ok value) -> Assert.AreEqual(value, "\\abc abc\n\t\b\f\r/\"")
     | _ -> Assert.Fail("error")
