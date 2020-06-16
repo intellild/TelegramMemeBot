@@ -1,7 +1,6 @@
-﻿module Parser
+﻿module Telegram.Synthetic.Dawn.Scripting.Parser
 
 open System
-open System.Numerics
 open Telegram.Bot.Types
 
 type State =
@@ -19,14 +18,6 @@ type NextItem =
     | Entity of string * MessageEntity
     | Single of char
     | End
-
-type Expression =
-    | Integer of BigInteger
-    | Atom of string
-    | Identifier of string
-    | StringLiteral of string
-    | Alien of string * MessageEntity
-
 let init text entities =
     { offset = 0
       row = 0
@@ -271,7 +262,7 @@ let stringLiteral =
             let! _ = run <| parseChar '\"'
             return chars
                    |> stringFromCharList
-                   |> StringLiteral
+                   |> Ast.String
         }
     ("string", impl)
 
@@ -289,8 +280,8 @@ let integerLiteral =
                 | None -> value
             return result
                    |> stringFromCharList
-                   |> BigInteger.Parse
-                   |> Integer
+                   |> bigint.Parse
+                   |> Ast.Int
         }
     ("number", impl)
 
@@ -311,7 +302,7 @@ let identifier =
     let impl =
         parser {
             let! name = parseIdentifier
-            return Identifier name }
+            return Ast.Identifier name }
     ("identifier", impl)
 
 let atom =
@@ -319,5 +310,5 @@ let atom =
         parser {
             let! _ = run <| parseChar ':'
             let! name = parseIdentifier
-            return Atom name }
+            return Ast.Atom name }
     ("atom", impl)
